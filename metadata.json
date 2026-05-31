@@ -1,0 +1,6 @@
+{
+  "name": "Baby Photo Restorer",
+  "description": "Upload old baby photos to restore clarity and remove noise.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
