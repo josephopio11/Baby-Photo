@@ -1,4 +1,4 @@
-import { Trash2, Download, Upload, Loader2, Sparkles, AlertCircle, Settings, X } from "lucide-react";
+import { Trash2, Download, Upload, Loader2, Sparkles, AlertCircle, Settings, X, Copy, Check } from "lucide-react";
 import React, { useRef, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -14,6 +14,7 @@ export default function App() {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const [settings, setSettings] = useState({
     provider: 'gemini',
@@ -134,6 +135,15 @@ export default function App() {
     setSelectedImage(null);
     setResultImage(null);
     setError(null);
+    setCopied(false);
+  };
+
+  const handleCopyBase64 = () => {
+    if (resultImage) {
+      navigator.clipboard.writeText(resultImage);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleRestorationSuccess = (dataUrl: string) => {
@@ -386,21 +396,42 @@ export default function App() {
 
           {/* Action Footer */}
           {resultImage && (
-            <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex items-center justify-end gap-3 sm:px-10">
-               <button 
-                  onClick={clearImage}
-                  className="text-slate-600 hover:bg-slate-200/50 bg-transparent px-6 py-2 rounded-lg text-sm font-medium transition-all"
+            <div className="bg-slate-50 border-t border-slate-200 px-6 py-6 flex flex-col sm:px-10">
+              <div className="flex items-center justify-end gap-3 mb-6">
+                 <button 
+                    onClick={clearImage}
+                    className="text-slate-600 hover:bg-slate-200/50 bg-transparent px-6 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    Start Over
+                  </button>
+                <a 
+                  href={resultImage}
+                  download="restored_baby_photo.jpg"
+                  className="px-6 py-2 text-sm font-semibold bg-white border border-slate-200 shadow-sm rounded-lg flex items-center gap-2 text-slate-800 hover:bg-slate-50 transition-all"
                 >
-                  Start Over
-                </button>
-              <a 
-                href={resultImage}
-                download="restored_baby_photo.jpg"
-                className="px-6 py-2 text-sm font-semibold bg-white border border-slate-200 shadow-sm rounded-lg flex items-center gap-2 text-slate-800 hover:bg-slate-50 transition-all"
-              >
-                <Download className="w-4 h-4" />
-                Download Restored Photo
-              </a>
+                  <Download className="w-4 h-4" />
+                  Download Restored Photo
+                </a>
+              </div>
+
+              {/* Base64 Output Box */}
+              <div className="pt-5 border-t border-slate-200/80">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Base64 Output</h4>
+                  <button
+                    onClick={handleCopyBase64}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-md hover:bg-slate-50 transition-all shadow-sm"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? "Copied!" : "Copy Base64"}
+                  </button>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-xl h-24 overflow-y-auto p-4 shadow-sm shadow-slate-100/50">
+                  <p className="text-[10px] sm:text-[11px] font-mono text-slate-500 break-all leading-relaxed select-all">
+                    {resultImage}
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>
