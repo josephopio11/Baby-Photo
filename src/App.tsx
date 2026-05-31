@@ -136,6 +136,18 @@ export default function App() {
     setError(null);
   };
 
+  const handleRestorationSuccess = (dataUrl: string) => {
+    setResultImage(dataUrl);
+    
+    // Auto-download the image
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = "restored_baby_photo.jpg";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const enhanceImage = async () => {
     if (!selectedImage) return;
 
@@ -192,12 +204,12 @@ export default function App() {
           if (match) {
             extractedImage = match[0];
           }
-          setResultImage(extractedImage);
+          handleRestorationSuccess(extractedImage);
         } else {
           // Fallback: see if there's a long continuous base64-looking string
           const rawBase64Match = msgContent.match(/(?:[A-Za-z0-9+/]{4}){100,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?/);
           if (rawBase64Match) {
-            setResultImage(`data:image/jpeg;base64,${rawBase64Match[0]}`);
+            handleRestorationSuccess(`data:image/jpeg;base64,${rawBase64Match[0]}`);
           } else {
             throw new Error(`The local model returned text instead of an image. Note: Most standard local models (like LLaVA in Ollama) can only "see" and describe images, but cannot generate or edit them. You need an image-generation model API to perform actual restoration. Model response: "${msgContent.substring(0, 150)}..."`);
           }
@@ -219,7 +231,7 @@ export default function App() {
           throw new Error(data.error || "Failed to process image.");
         }
 
-        setResultImage(data.resultImage);
+        handleRestorationSuccess(data.resultImage);
       }
     } catch (err: any) {
       setError(err.message || "An unexpected error occurred.");
