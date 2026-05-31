@@ -11,6 +11,10 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+
   const [settings, setSettings] = useState({
     provider: 'gemini',
     customUrl: 'http://localhost:11434/v1',
@@ -24,6 +28,50 @@ export default function App() {
       setSettings(JSON.parse(saved));
     }
   }, []);
+
+  useEffect(() => {
+    if (settingsOpen && settings.provider === 'local') {
+      fetchModels();
+    }
+  }, [settingsOpen, settings.provider]);
+
+  const fetchModels = async () => {
+    if (!settings.customUrl) return;
+    setFetchingModels(true);
+    setModelsError(null);
+    try {
+      const headers: any = {};
+      if (settings.customApiKey) {
+        headers["Authorization"] = `Bearer ${settings.customApiKey}`;
+      }
+      const response = await fetch(`${settings.customUrl.replace(/\/$/, '')}/models`, {
+        method: 'GET',
+        headers
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch models (${response.status})`);
+      }
+      const data = await response.json();
+      
+      let discoveredModels: string[] = [];
+      if (data.data && Array.isArray(data.data)) {
+        discoveredModels = data.data.map((m: any) => m.id);
+      } else if (data.models && Array.isArray(data.models)) {
+        discoveredModels = data.models.map((m: any) => m.name || m.id);
+      }
+      
+      setAvailableModels(discoveredModels);
+      
+      if (discoveredModels.length > 0 && !discoveredModels.includes(settings.customModel)) {
+        saveSettings((prev: any) => ({ ...prev, customModel: discoveredModels[0] }));
+      }
+    } catch (err: any) {
+      setModelsError(`Could not fetch models: ${err.message}. Ensure CORS is enabled (e.g. OLLAMA_ORIGINS="*").`);
+      setAvailableModels([]);
+    } finally {
+      setFetchingModels(false);
+    }
+  };
 
   const saveSettings = (newSettings: any) => {
     setSettings(newSettings);
@@ -98,23 +146,69 @@ export default function App() {
       // Extract the raw base64 part
       const base64Data = selectedImage.split(',')[1];
       
-      const response = await fetch("/api/enhance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: base64Data,
-          mimeType,
-          settings,
-        }),
-      });
+      if (settings.provider === 'local') {
+        if (!settings.customUrl) {
+          throw new Error("Local provider URL is missing. Check your settings.");
+        }
 
-      const data = await response.json();
+        const payload = {
+          model: settings.customModel || "llava",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "Carefully restore, upscale, and clean up this old baby photo. Remove scratches, dust, and noise. Sharpen the details to make it crisp and clear while preserving the original subject's appearance and the vintage feel." },
+                { type: "image_url", image_url: { url: `data:${mimeType || "image/jpeg"};base64,${base64Data}` } }
+              ]
+            }
+          ]
+        };
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to process image.");
+        const headers: any = { "Content-Type": "application/json" };
+        if (settings.customApiKey) headers["Authorization"] = `Bearer ${settings.customApiKey}`;
+
+        let fetchRes;
+        try {
+          fetchRes = await fetch(`${settings.customUrl.replace(/\/$/, '')}/chat/completions`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(payload)
+          });
+        } catch (e: any) {
+          throw new Error(`Connection failed: ${e.message}. If using localhost, ensure CORS is enabled (OLLAMA_ORIGINS="*").`);
+        }
+
+        if (!fetchRes.ok) {
+           throw new Error(`Local model error (${fetchRes.status}): ${await fetchRes.text()}`);
+        }
+        
+        const data = await fetchRes.json();
+        const msgContent = data.choices?.[0]?.message?.content || "";
+        
+        if (msgContent && msgContent.includes("data:image")) {
+          setResultImage(msgContent);
+        } else {
+          throw new Error(`Model returned text instead of editing the image: "${msgContent}"`);
+        }
+      } else {
+        const response = await fetch("/api/enhance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageBase64: base64Data,
+            mimeType,
+            settings,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to process image.");
+        }
+
+        setResultImage(data.resultImage);
       }
-
-      setResultImage(data.resultImage);
     } catch (err: any) {
       setError(err.message || "An unexpected error occurred.");
     } finally {
@@ -347,14 +441,43 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Model Name</label>
-                      <input 
-                        type="text" 
-                        value={settings.customModel}
-                        onChange={(e) => saveSettings({ ...settings, customModel: e.target.value })}
-                        placeholder="llava"
-                        className="w-full border-slate-200 rounded-xl px-4 py-3 bg-white border focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono"
-                      />
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-slate-700">Model Name</label>
+                        <button 
+                          onClick={fetchModels} 
+                          disabled={fetchingModels}
+                          className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {fetchingModels ? <Loader2 className="w-3 h-3 animate-spin"/> : null}
+                          Refresh Models
+                        </button>
+                      </div>
+                      
+                      <div className="relative">
+                        {availableModels.length > 0 ? (
+                          <select 
+                            value={settings.customModel}
+                            onChange={(e) => saveSettings({ ...settings, customModel: e.target.value })}
+                            className="w-full border-slate-200 rounded-xl px-4 py-3 bg-white border focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono appearance-none"
+                          >
+                            {availableModels.map((model) => (
+                              <option key={model} value={model}>{model}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input 
+                            type="text" 
+                            value={settings.customModel}
+                            onChange={(e) => saveSettings({ ...settings, customModel: e.target.value })}
+                            placeholder="llava"
+                            className="w-full border-slate-200 rounded-xl px-4 py-3 bg-white border focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono"
+                          />
+                        )}
+                      </div>
+                      
+                      {modelsError && (
+                        <p className="text-xs text-red-500 mt-2 leading-relaxed">{modelsError}</p>
+                      )}
                     </div>
 
                     <div>
