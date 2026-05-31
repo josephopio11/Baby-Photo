@@ -157,7 +157,7 @@ export default function App() {
             {
               role: "user",
               content: [
-                { type: "text", text: "Carefully restore, upscale, and clean up this old baby photo. Remove scratches, dust, and noise. Sharpen the details to make it crisp and clear while preserving the original subject's appearance and the vintage feel." },
+                { type: "text", text: "Carefully restore, upscale, and clean up this old baby photo. CRITICAL INSTRUCTION: You MUST return ONLY the base64 encoded text of the restored image in JPEG format. Your entire response must start exactly with 'data:image/jpeg;base64,' followed by the base64 string. Do not output any conversational text, markdown, or explanations." },
                 { type: "image_url", image_url: { url: `data:${mimeType || "image/jpeg"};base64,${base64Data}` } }
               ]
             }
@@ -186,9 +186,21 @@ export default function App() {
         const msgContent = data.choices?.[0]?.message?.content || "";
         
         if (msgContent && msgContent.includes("data:image")) {
-          setResultImage(msgContent);
+          // Some local setups may return markdown wrapping the image
+          let extractedImage = msgContent;
+          const match = msgContent.match(/data:image\/[a-zA-Z]+;base64,[A-Za-z0-9+/=]+/);
+          if (match) {
+            extractedImage = match[0];
+          }
+          setResultImage(extractedImage);
         } else {
-          throw new Error(`Model returned text instead of editing the image: "${msgContent}"`);
+          // Fallback: see if there's a long continuous base64-looking string
+          const rawBase64Match = msgContent.match(/(?:[A-Za-z0-9+/]{4}){100,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?/);
+          if (rawBase64Match) {
+            setResultImage(`data:image/jpeg;base64,${rawBase64Match[0]}`);
+          } else {
+            throw new Error(`The local model returned text instead of an image. Note: Most standard local models (like LLaVA in Ollama) can only "see" and describe images, but cannot generate or edit them. You need an image-generation model API to perform actual restoration. Model response: "${msgContent.substring(0, 150)}..."`);
+          }
         }
       } else {
         const response = await fetch("/api/enhance", {
@@ -371,7 +383,7 @@ export default function App() {
                 </button>
               <a 
                 href={resultImage}
-                download="restored_baby_photo.png"
+                download="restored_baby_photo.jpg"
                 className="px-6 py-2 text-sm font-semibold bg-white border border-slate-200 shadow-sm rounded-lg flex items-center gap-2 text-slate-800 hover:bg-slate-50 transition-all"
               >
                 <Download className="w-4 h-4" />
