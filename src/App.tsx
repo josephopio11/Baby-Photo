@@ -1,5 +1,5 @@
-import { Trash2, Download, Upload, Loader2, Sparkles, AlertCircle } from "lucide-react";
-import React, { useRef, useState } from "react";
+import { Trash2, Download, Upload, Loader2, Sparkles, AlertCircle, Settings, X } from "lucide-react";
+import React, { useRef, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function App() {
@@ -9,6 +9,26 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState({
+    provider: 'gemini',
+    customUrl: 'http://localhost:11434/v1',
+    customModel: 'llava',
+    customApiKey: ''
+  });
+
+  useEffect(() => {
+    const saved = localStorage.getItem('appSettings');
+    if (saved) {
+      setSettings(JSON.parse(saved));
+    }
+  }, []);
+
+  const saveSettings = (newSettings: any) => {
+    setSettings(newSettings);
+    localStorage.setItem('appSettings', JSON.stringify(newSettings));
+  };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -84,6 +104,7 @@ export default function App() {
         body: JSON.stringify({
           imageBase64: base64Data,
           mimeType,
+          settings,
         }),
       });
 
@@ -104,6 +125,16 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-4 selection:bg-slate-200 font-sans">
       <div className="max-w-4xl w-full">
+        <div className="absolute top-6 right-6">
+          <button 
+            onClick={() => setSettingsOpen(true)}
+            className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-slate-200"
+            title="Settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
+
         {/* Header */}
         <div className="text-center mb-10">
           <motion.div
@@ -256,6 +287,102 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {settingsOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={() => setSettingsOpen(false)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 w-full max-w-md border border-slate-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-slate-800">AI Processing Settings</h3>
+                <button 
+                  onClick={() => setSettingsOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Provider</label>
+                  <select 
+                    value={settings.provider}
+                    onChange={(e) => saveSettings({ ...settings, provider: e.target.value })}
+                    className="w-full border-slate-200 rounded-xl px-4 py-3 bg-slate-50 border focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
+                  >
+                    <option value="gemini">Google Gemini (Cloud)</option>
+                    <option value="local">Local API (Ollama / LMStudio)</option>
+                  </select>
+                </div>
+
+                {settings.provider === 'local' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="space-y-4"
+                  >
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Base URL</label>
+                      <input 
+                        type="text" 
+                        value={settings.customUrl}
+                        onChange={(e) => saveSettings({ ...settings, customUrl: e.target.value })}
+                        placeholder="http://localhost:11434/v1"
+                        className="w-full border-slate-200 rounded-xl px-4 py-3 bg-white border focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono"
+                      />
+                      <p className="text-xs text-slate-400 mt-2">Use /v1 for OpenAI compatibility (LMStudio/Ollama)</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Model Name</label>
+                      <input 
+                        type="text" 
+                        value={settings.customModel}
+                        onChange={(e) => saveSettings({ ...settings, customModel: e.target.value })}
+                        placeholder="llava"
+                        className="w-full border-slate-200 rounded-xl px-4 py-3 bg-white border focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">API Key (Optional)</label>
+                      <input 
+                        type="password" 
+                        value={settings.customApiKey}
+                        onChange={(e) => saveSettings({ ...settings, customApiKey: e.target.value })}
+                        placeholder="Leave blank for local"
+                        className="w-full border-slate-200 rounded-xl px-4 py-3 bg-white border focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              <div className="mt-8">
+                <button 
+                  onClick={() => setSettingsOpen(false)}
+                  className="w-full bg-slate-900 text-white rounded-xl px-6 py-3 font-medium hover:bg-slate-800 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
